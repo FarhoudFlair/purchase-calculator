@@ -190,10 +190,11 @@ interface ScheduleResult {
   effectiveAmortizationYears: number;
 }
 
-// interface ComparisonData {
-//   originalAmortization: number;
-//   originalInterestPaid: number;
-// }
+interface DataPoint {
+  year: number;
+  standardBalance: number;
+  acceleratedBalance?: number;  // Optional since it's not always present
+}
 
 // Main calculator component
 const PurchaseCalculator = () => {
@@ -846,20 +847,19 @@ const handleInputChange = (name: keyof Inputs, value: unknown) => {
     // Create comparison data points
     const data = [];
     for (let i = 0; i < maxYears; i++) {
-      const dataPoint = { year: i + 1 };
+      const dataPoint: DataPoint = {
+        year: i + 1,
+        standardBalance: 0
+      };
       
       // Add standard schedule balance if available
       if (i < results.standardAmortizationSchedule.length) {
         dataPoint.standardBalance = results.standardAmortizationSchedule[i].endingBalance;
-      } else {
-        dataPoint.standardBalance = 0;
       }
       
       // Add accelerated schedule balance if available
       if (i < results.amortizationSchedule.length) {
         dataPoint.acceleratedBalance = results.amortizationSchedule[i].endingBalance;
-      } else {
-        dataPoint.acceleratedBalance = 0;
       }
       
       data.push(dataPoint);
