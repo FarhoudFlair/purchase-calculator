@@ -325,7 +325,7 @@ const handleInputChange = (name: keyof Inputs, value: unknown) => {
     // For numeric fields
     if (typeof inputs[name] === 'number') {
       // Convert to number and prevent leading zeros
-      let numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
+      const numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
       value = Number(numericValue);
     }
     
