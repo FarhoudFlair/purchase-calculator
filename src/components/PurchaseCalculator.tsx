@@ -190,10 +190,10 @@ interface ScheduleResult {
   effectiveAmortizationYears: number;
 }
 
-interface ComparisonData {
-  originalAmortization: number;
-  originalInterestPaid: number;
-}
+// interface ComparisonData {
+//   originalAmortization: number;
+//   originalInterestPaid: number;
+// }
 
 // Main calculator component
 const PurchaseCalculator = () => {
@@ -230,7 +230,7 @@ const PurchaseCalculator = () => {
   });
   
   // State for input validity
-  const [inputErrors, setInputErrors] = useState<Record<string, boolean>>({});
+//   const [inputErrors, setInputErrors] = useState<Record<string, boolean>>({});  //! COMMENTED OUT FOR NOW
 
   // State for calculated results
   const [results, setResults] = useState<Results>({
@@ -257,13 +257,13 @@ const PurchaseCalculator = () => {
   const [activeTab, setActiveTab] = useState('summary');
   
   // Additional state for comparison data
-  const [comparisonData, setComparisonData] = useState<ComparisonData>({
-    originalAmortization: 0,
-    originalInterestPaid: 0
-  });
+//   const [comparisonData, setComparisonData] = useState<ComparisonData>({
+//     originalAmortization: 0,
+//     originalInterestPaid: 0
+//   });
 
   // Handle input changes with validation
-  const handleInputChange = (name: keyof Inputs, value: any) => {
+  const handleInputChange = (name: keyof Inputs, value: unknown) => {
     // Handle empty or invalid values
     if (value === '' || isNaN(value)) {
       setInputs(prev => ({ ...prev, [name]: '' }));
@@ -277,7 +277,7 @@ const PurchaseCalculator = () => {
       value = Number(value);
     }
     
-    let updatedInputs = { ...inputs, [name]: value };
+    const updatedInputs = { ...inputs, [name]: value };
 
     // Update related values
     if (name === 'purchasePrice' && inputs.downPaymentType === 'percent') {
@@ -329,7 +329,8 @@ const PurchaseCalculator = () => {
     }
     
     calculateMortgage();
-  }, [inputs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inputs]);
 
   // Function to generate amortization schedule
   const generateAmortizationSchedule = (
@@ -346,7 +347,7 @@ const PurchaseCalculator = () => {
     const interestRatePerPayment = (annualInterestRate / 100) / paymentsPerYear;
     let balance = principal;
     let totalInterestPaid = 0;
-    let yearlySchedule: YearlyScheduleItem[] = [];
+    const yearlySchedule: YearlyScheduleItem[] = [];
     let totalInterestPaidOverTerm = 0;
     let balanceAtEndOfTerm = 0;
     let lastPaymentNumber = 0;
@@ -432,8 +433,8 @@ const PurchaseCalculator = () => {
   const calculateLandTransferTax = (propertyValue: number, province: string, municipality: string, firstTimeBuyer: boolean): LandTransferTaxResult => {
     let provincialTax = 0;
     let municipalTax = 0;
-    let taxDetails: LandTransferTaxDetails = {
-      provincial: { value: 0, name: "" },
+    const taxDetails: LandTransferTaxDetails = {
+        provincial: { value: 0, name: "" },
       municipal: { value: 0, name: "" }
     };
 
@@ -749,10 +750,10 @@ const PurchaseCalculator = () => {
     const timeShaved = originalAmortization - effectiveAmortization;
 
     // Update comparison data for charts
-    setComparisonData({
-      originalAmortization,
-      originalInterestPaid
-    });
+    // setComparisonData({
+    //   originalAmortization,
+    //   originalInterestPaid
+    // });
 
     // Update results
     setResults({
