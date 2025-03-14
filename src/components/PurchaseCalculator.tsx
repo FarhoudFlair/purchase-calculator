@@ -263,9 +263,61 @@ const PurchaseCalculator = () => {
 //   });
 
   // Handle input changes with validation
-  const handleInputChange = (name: keyof Inputs, value: unknown) => {
-    // Handle empty or invalid values
-    if (value === '' || isNaN(value)) {
+//   const handleInputChange = (name: keyof Inputs, value: unknown) => {
+//     // Handle empty or invalid values
+//     if (value === '' || isNaN(value)) {
+//       setInputs(prev => ({ ...prev, [name]: '' }));
+//       return;
+//     }
+    
+//     // For numeric fields
+//     if (typeof inputs[name] === 'number') {
+//       // Convert to number and prevent leading zeros
+//       value = String(value).replace(/^0+(?=\d)/, '');
+//       value = Number(value);
+//     }
+    
+//     const updatedInputs = { ...inputs, [name]: value };
+
+//     // Update related values
+//     if (name === 'purchasePrice' && inputs.downPaymentType === 'percent') {
+//       const purchasePrice = typeof value === 'number' ? value : 0;
+//       const downPaymentPercent = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
+//       updatedInputs.downPayment = Math.round(purchasePrice * (downPaymentPercent / 100) / 100) * 100;
+//     } else if (name === 'downPayment') {
+//       if (inputs.downPaymentType === 'percent') {
+//         if (value > 100) value = 100;
+//         updatedInputs.downPayment = value;
+//       } else {
+//         const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
+//         if (value > purchasePrice) value = purchasePrice;
+//         updatedInputs.downPayment = value;
+//       }
+//     } else if (name === 'downPaymentType') {
+//       const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
+//       const downPayment = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
+      
+//       if (value === 'percent') {
+//         updatedInputs.downPayment = Math.round((downPayment / purchasePrice) * 100);
+//       } else {
+//         updatedInputs.downPayment = Math.round(purchasePrice * (downPayment / 100) / 100) * 100;
+//       }
+//     }
+
+//     setInputs(updatedInputs);
+//   };
+
+  // Replace the handleInputChange function with this fixed version:
+
+const handleInputChange = (name: keyof Inputs, value: unknown) => {
+    // Handle empty string
+    if (value === '') {
+      setInputs(prev => ({ ...prev, [name]: '' }));
+      return;
+    }
+    
+    // Handle invalid numbers
+    if (typeof value === 'string' && isNaN(Number(value))) {
       setInputs(prev => ({ ...prev, [name]: '' }));
       return;
     }
@@ -273,12 +325,12 @@ const PurchaseCalculator = () => {
     // For numeric fields
     if (typeof inputs[name] === 'number') {
       // Convert to number and prevent leading zeros
-      value = String(value).replace(/^0+(?=\d)/, '');
-      value = Number(value);
+      let numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
+      value = Number(numericValue);
     }
     
     const updatedInputs = { ...inputs, [name]: value };
-
+  
     // Update related values
     if (name === 'purchasePrice' && inputs.downPaymentType === 'percent') {
       const purchasePrice = typeof value === 'number' ? value : 0;
@@ -286,12 +338,14 @@ const PurchaseCalculator = () => {
       updatedInputs.downPayment = Math.round(purchasePrice * (downPaymentPercent / 100) / 100) * 100;
     } else if (name === 'downPayment') {
       if (inputs.downPaymentType === 'percent') {
-        if (value > 100) value = 100;
-        updatedInputs.downPayment = value;
+        const numValue = Number(value);
+        if (numValue > 100) value = 100;
+        updatedInputs.downPayment = Number(value);
       } else {
         const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
-        if (value > purchasePrice) value = purchasePrice;
-        updatedInputs.downPayment = value;
+        const numValue = Number(value);
+        if (numValue > purchasePrice) value = purchasePrice;
+        updatedInputs.downPayment = Number(value);
       }
     } else if (name === 'downPaymentType') {
       const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
@@ -303,7 +357,7 @@ const PurchaseCalculator = () => {
         updatedInputs.downPayment = Math.round(purchasePrice * (downPayment / 100) / 100) * 100;
       }
     }
-
+  
     setInputs(updatedInputs);
   };
 
