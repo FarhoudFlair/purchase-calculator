@@ -4,28 +4,28 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 
 
 // Responsive utility hook
-function useWindowSize() {
-  const [windowSize, setWindowSize] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 0,
-    height: typeof window !== 'undefined' ? window.innerHeight : 0,
-  });
+// function useWindowSize() {
+//   const [windowSize, setWindowSize] = useState({
+//     width: typeof window !== 'undefined' ? window.innerWidth : 0,
+//     height: typeof window !== 'undefined' ? window.innerHeight : 0,
+//   });
 
-  useEffect(() => {
-    function handleResize() {
-      setWindowSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    }
+  // useEffect(() => {
+  //   function handleResize() {
+  //     setWindowSize({
+  //       width: window.innerWidth,
+  //       height: window.innerHeight,
+  //     });
+  //   }
     
-    window.addEventListener("resize", handleResize);
-    handleResize(); // Call once on mount
+//     window.addEventListener("resize", handleResize);
+//     handleResize(); // Call once on mount
     
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+//     return () => window.removeEventListener("resize", handleResize);
+//   }, []);
   
-  return windowSize;
-}
+//   return windowSize;
+// }
 
 
 const MortgageCalculator = () => {
