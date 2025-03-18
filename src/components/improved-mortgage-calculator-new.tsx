@@ -90,8 +90,75 @@ const MortgageCalculator = () => {
   const TERM_LENGTHS = Array.from({ length: 10 }, (_, i) => i + 1)
     .map(year => ({ value: year, label: `${year} Year${year > 1 ? 's' : ''}` }));
 
+  // Add type for inputs state
+  interface InputsState {
+    purchasePrice: number;
+    downPayment: number;
+    downPaymentType: 'amount' | 'percent';
+    province: string;
+    municipality: string;
+    propertyType: string;
+    interestRate: number;
+    amortizationPeriod: number;
+    term: number;
+    paymentFrequency: string;
+    firstTimeBuyer: boolean;
+    newlyBuiltHome: boolean;
+    foreignBuyer: boolean;
+    propertyTaxes: number;
+    condoFees: number;
+    homeInsurance: number;
+    utilities: number;
+    maintenance: number;
+    extraPayment: number;
+    paymentIncrease: number;
+    annualPrepayment: number;
+    legalFees: number;
+    titleInsurance: number;
+    homeInspection: number;
+    appraisalFee: number;
+    brokerageFee: number;
+    lenderFee: number;
+    movingCosts: number;
+  }
+
+  // Add type for results state
+  interface ResultsState {
+    mortgageAmount: number;
+    downPaymentPercent: number;
+    mortgageInsurance: number;
+    totalMortgage: number;
+    monthlyPayment: number;
+    principalPerPayment: number;
+    interestPerPayment: number;
+    totalMonthlyExpenses: number;
+    interestPaidOverTerm: number;
+    balanceAtEndOfTerm: number;
+    amortizationSchedule: Array<{
+      year: number;
+      startingBalance: number;
+      principalPaid: number;
+      interestPaid: number;
+      extraPayments: number;
+      endingBalance: number;
+    }>;
+    standardAmortizationSchedule: Array<{
+      year: number;
+      startingBalance: number;
+      principalPaid: number;
+      interestPaid: number;
+      extraPayments: number;
+      endingBalance: number;
+    }>;
+    effectiveAmortization: number;
+    closingCosts: number;
+    interestSavingsOverTerm: number;
+    interestSavingsOverAmortization: number;
+    timeShaved: number;
+  }
+
   // States
-  const [inputs, setInputs] = useState({
+  const [inputs, setInputs] = useState<InputsState>({
     purchasePrice: 500000,
     downPayment: 100000,
     downPaymentType: 'amount',
@@ -122,7 +189,7 @@ const MortgageCalculator = () => {
     movingCosts: 2000
   });
 
-  const [results, setResults] = useState({
+  const [results, setResults] = useState<ResultsState>({
     mortgageAmount: 0,
     downPaymentPercent: 0,
     mortgageInsurance: 0,
@@ -145,16 +212,16 @@ const MortgageCalculator = () => {
   const [activeTab, setActiveTab] = useState('summary');
 
   // Utility functions
-  const formatCurrency = (value) => {
+  const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(value);
   };
 
-  const formatPercent = (value) => {
+  const formatPercent = (value: number) => {
     return new Intl.NumberFormat('en-CA', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 100);
   };
 
   // Handle input changes
-  const handleInputChange = (name, value) => {
+  const handleInputChange = (name: string, value: string | number | boolean) => {
     // Handle empty string
     if (value === '') {
       setInputs(prev => ({ ...prev, [name]: '' }));
@@ -162,7 +229,7 @@ const MortgageCalculator = () => {
     }
     
     // For numeric fields
-    if (typeof inputs[name] === 'number') {
+    if (typeof inputs[name as keyof typeof inputs] === 'number') {
       // Convert to number and prevent leading zeros
       const numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
       value = Number(numericValue);
@@ -201,7 +268,7 @@ const MortgageCalculator = () => {
   };
 
   // Handle blur event
-  const handleBlur = (name) => {
+  const handleBlur = (name: keyof typeof inputs) => {
     if (inputs[name] === '') {
       setInputs(prev => ({ ...prev, [name]: 0 }));
     }
@@ -301,15 +368,15 @@ const MortgageCalculator = () => {
 
     // Generate amortization schedule
     const generateAmortizationSchedule = (
-      principal, 
-      annualInterestRate, 
-      amortizationYears, 
-      paymentAmount, 
-      paymentsPerYear,
-      term,
-      extraPayment,
-      paymentIncrease,
-      annualPrepayment
+      principal: number,
+      annualInterestRate: number,
+      amortizationYears: number,
+      paymentAmount: number,
+      paymentsPerYear: number,
+      term: number,
+      extraPayment: number,
+      paymentIncrease: number,
+      annualPrepayment: number
     ) => {
       const interestRatePerPayment = (annualInterestRate / 100) / paymentsPerYear;
       let balance = principal;
@@ -624,7 +691,7 @@ const MortgageCalculator = () => {
                       className="w-full border border-gray-300 rounded px-3 py-2 md:py-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                       value={inputs.province}
                       onChange={(e) => {
-                        const newProvince = e.target.value;
+                        const newProvince = e.target.value as keyof typeof MUNICIPALITIES;
                         const municipalitiesForProvince = MUNICIPALITIES[newProvince] || MUNICIPALITIES['default'];
                         handleInputChange('province', newProvince);
                         handleInputChange('municipality', municipalitiesForProvince[0].value);
@@ -643,7 +710,7 @@ const MortgageCalculator = () => {
                       value={inputs.municipality}
                       onChange={(e) => handleInputChange('municipality', e.target.value)}
                     >
-                      {(MUNICIPALITIES[inputs.province] || MUNICIPALITIES['default']).map(municipality => (
+                      {(MUNICIPALITIES[inputs.province as keyof typeof MUNICIPALITIES] || MUNICIPALITIES['default']).map(municipality => (
                         <option key={municipality.value} value={municipality.value}>{municipality.label}</option>
                       ))}
                     </select>
@@ -1085,7 +1152,7 @@ const MortgageCalculator = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="year" />
                       <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                       <Legend />
                       <Line
                         type="monotone"
@@ -1292,7 +1359,7 @@ const MortgageCalculator = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="year" />
                       <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                       <Legend />
                       <Line
                         type="monotone"
