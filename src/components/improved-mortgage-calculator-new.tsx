@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
@@ -131,6 +131,8 @@ const MortgageCalculator = () => {
     monthlyPayment: number;
     principalPerPayment: number;
     interestPerPayment: number;
+    firstPrincipalPerPayment: number;
+    firstInterestPerPayment: number;
     totalMonthlyExpenses: number;
     interestPaidOverTerm: number;
     balanceAtEndOfTerm: number;
@@ -157,6 +159,118 @@ const MortgageCalculator = () => {
     timeShaved: number;
   }
 
+  interface TaxInputArgs {
+    purchasePrice: number;
+    province: string;
+    municipality: string; // e.g., 'toronto' for specific municipal LTT
+    firstTimeBuyer: boolean;
+    newlyBuiltHome: boolean; // Needed for some rebates
+  }
+  /**
+ * Calculates Provincial (and applicable Municipal) Land Transfer Tax.
+ * NOTE: Rates are examples and MUST be verified/updated.
+ */
+  const calculateLTT = ({ purchasePrice, province, municipality }: TaxInputArgs): number => {
+    let ltt = 0;
+
+    switch (province) {
+      case 'ON':
+        // Ontario Provincial LTT (Marginal Rates - Example as of ~early 2025)
+        if (purchasePrice > 400000) {
+          ltt += (purchasePrice - 400000) * 0.02; // 2.0% on amount over 400k
+        }
+        if (purchasePrice > 2000000) {
+          ltt += (purchasePrice - 2000000) * 0.005; // +0.5% (total 2.5%) on amount over 2M
+        }
+        if (purchasePrice > 250000) {
+          ltt += Math.min(purchasePrice, 400000) * 0.015; // 1.5% on portion between 250k-400k
+        }
+        if (purchasePrice > 55000) {
+          ltt += Math.min(purchasePrice, 250000) * 0.01; // 1.0% on portion between 55k-250k
+        }
+        ltt += Math.min(purchasePrice, 55000) * 0.005; // 0.5% on portion up to 55k
+
+        // Toronto Municipal LTT (Example - check current rates)
+        if (municipality === 'toronto') {
+          // Similar marginal calculation as provincial, but with Toronto's rates
+          // Add Toronto LTT calculation here... e.g.,
+          if (purchasePrice > 2000000) ltt += (purchasePrice - 2000000) * 0.025;
+          // ... add other brackets for Toronto ...
+        }
+        break;
+
+      case 'BC':
+        // British Columbia Property Transfer Tax (Marginal Rates - Example as of ~early 2025)
+        ltt = 0;
+        if (purchasePrice > 3000000) {
+          ltt += (purchasePrice - 3000000) * 0.02; // +2% (total 5%) on portion over $3M
+        }
+        if (purchasePrice > 200000) {
+          ltt += Math.min(purchasePrice, 3000000) * 0.02; // 2% on portion $200k-$3M
+        }
+        ltt += Math.min(purchasePrice, 200000) * 0.01; // 1% on the first $200k
+        // BC has an additional rate for >$3M residential, check specifics
+        break;
+
+      // Add cases for other provinces (QC, AB, MB, SK, etc.) with their specific rules
+      // Example: Alberta has no provincial LTT, but registration fees
+      case 'AB':
+        ltt = 0; // No LTT, but consider adding registration fees separately
+        break;
+
+      default:
+        // Default or simplified fallback (use with caution)
+        ltt = purchasePrice * 0.01; // Example: 1% fallback
+        break;
+    }
+
+    return Math.round(ltt); // Round to nearest dollar
+  };
+
+    /**
+   * Calculates First-Time Home Buyer Land Transfer Tax Rebates.
+   * NOTE: Amounts/Rules are examples and MUST be verified/updated.
+   */
+  const calculateLTTRebate = ({ purchasePrice, province, municipality, firstTimeBuyer, lttAmount }: TaxInputArgs & { lttAmount: number }): number => {
+    if (!firstTimeBuyer) return 0;
+
+    let rebate = 0;
+
+    switch (province) {
+      case 'ON':
+        // Ontario FTHB Rebate: Max $4000 (covers LTT on first $368,333)
+        rebate = Math.min(lttAmount, 4000);
+        // Toronto FTHB Rebate: Max $4475 (check current max)
+        if (municipality === 'toronto') {
+          // Calculate the Toronto portion of the LTT and find the rebate on that
+          // This requires calculating Toronto LTT separately or estimating its portion.
+          // Example simplified: Add Toronto max rebate potential
+          // rebate += Math.min(lttAmount /* need Toronto LTT portion */, 4475); // Check Toronto rules carefully
+        }
+        break;
+
+      case 'BC':
+        // BC FTHB Rebate/Exemption (Example threshold ~500k, check current)
+        const bcFthbThreshold = 500000; // Example value - CHECK CURRENT BC RULES
+        const bcPartialThreshold = 525000; // Example value
+        if (purchasePrice <= bcFthbThreshold) {
+            rebate = lttAmount; // Full exemption up to threshold
+        } else if (purchasePrice < bcPartialThreshold) {
+            // Partial rebate calculation - check BC government for formula
+            // Example: rebate = lttAmount * ( (bcPartialThreshold - purchasePrice) / (bcPartialThreshold - bcFthbThreshold) );
+        }
+        break;
+
+      // Add cases for other provinces offering rebates (e.g., PEI, potentially others)
+
+      default:
+        rebate = 0;
+        break;
+    }
+
+    return Math.round(rebate);
+  };
+
   // States
   const [inputs, setInputs] = useState<InputsState>({
     purchasePrice: 500000,
@@ -175,7 +289,7 @@ const MortgageCalculator = () => {
     propertyTaxes: 5000,
     condoFees: 0,
     homeInsurance: 1200,
-    utilities: 300,
+    utilities: 0,
     maintenance: 1,
     extraPayment: 0,
     paymentIncrease: 0,
@@ -197,6 +311,8 @@ const MortgageCalculator = () => {
     monthlyPayment: 0,
     principalPerPayment: 0,
     interestPerPayment: 0,
+    firstPrincipalPerPayment: 0,
+    firstInterestPerPayment: 0,
     totalMonthlyExpenses: 0,
     interestPaidOverTerm: 0,
     balanceAtEndOfTerm: 0,
@@ -217,74 +333,220 @@ const MortgageCalculator = () => {
   };
 
   const formatPercent = (value: number) => {
-    return new Intl.NumberFormat('en-CA', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 100);
+    // Check if the value is already in percentage form (like 5.5 for 5.5%)
+    // If so, don't divide by 100 again
+    return new Intl.NumberFormat('en-CA', { 
+      style: 'percent', 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    }).format(value / 100);
+   // return new Intl.NumberFormat('en-CA', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 100);
+  };
+
+  formatPercent(inputs.interestRate)
+  const displayPercent = (value: number) => {
+    return `${value.toFixed(2)}%`;
   };
 
   // Handle input changes
-  const handleInputChange = (name: string, value: string | number | boolean) => {
-    // Handle empty string
-    if (value === '') {
-      setInputs(prev => ({ ...prev, [name]: '' }));
-      return;
-    }
+  // const handleInputChange = (name: string, value: string | number | boolean) => {
+  //   // Handle empty string
+  //   if (value === '') {
+  //     setInputs(prev => ({ ...prev, [name]: '' }));
+  //     return;
+  //   }
     
-    // For numeric fields
-    if (typeof inputs[name as keyof typeof inputs] === 'number') {
-      // Convert to number and prevent leading zeros
-      const numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
-      value = Number(numericValue);
-    }
+  //   // For numeric fields
+  //   if (typeof inputs[name as keyof typeof inputs] === 'number') {
+  //     // Convert to number and prevent leading zeros
+  //     const numericValue = typeof value === 'string' ? value.replace(/^0+(?=\d)/, '') : String(value);
+  //     value = Number(numericValue);
+  //   }
     
-    const updatedInputs = { ...inputs, [name]: value };
+  //   const updatedInputs = { ...inputs, [name]: value };
   
-    // Update related values
-    if (name === 'purchasePrice' && inputs.downPaymentType === 'percent') {
-      const purchasePrice = typeof value === 'number' ? value : 0;
-      const downPaymentPercent = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
-      updatedInputs.downPayment = Math.round(purchasePrice * (downPaymentPercent / 100) / 100) * 100;
-    } else if (name === 'downPayment') {
-      if (inputs.downPaymentType === 'percent') {
-        const numValue = Number(value);
-        if (numValue > 100) value = 100;
-        updatedInputs.downPayment = Number(value);
+  //   // Update related values
+  //   if (name === 'purchasePrice' && inputs.downPaymentType === 'percent') {
+  //     const purchasePrice = typeof value === 'number' ? value : 0;
+  //     const downPaymentPercent = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
+  //     updatedInputs.downPayment = Math.round(purchasePrice * (downPaymentPercent / 100));
+  //   } else if (name === 'downPayment') {
+  //     if (inputs.downPaymentType === 'percent') {
+  //       const numValue = Number(value);
+  //       updatedInputs.downPayment = numValue > 100 ? 100 : numValue;
+  //     } else {
+  //       const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
+  //       const numValue = Number(value);
+  //       updatedInputs.downPayment = numValue > purchasePrice ? purchasePrice : numValue;
+  //     }
+  //   } else if (name === 'downPaymentType') {
+  //     const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
+  //     const downPayment = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
+  //     if (value === 'percent') {
+  //       updatedInputs.downPayment = Number(((downPayment / purchasePrice) * 100).toFixed(2));
+  //     } else {
+  //       updatedInputs.downPayment = Math.round((purchasePrice * downPayment) / 100);
+  //     }
+  //   }
+
+  //   if (name == 'purchasePrice' && inputs.downPaymentType == 'amount') {
+  //     const purchasePrice = Number(value);
+  //     if (inputs.downPayment > purchasePrice) {
+  //       updatedInputs.downPayment = purchasePrice;
+  //     }
+  //   }
+  
+  //   setInputs(updatedInputs);
+  // };
+
+  // // Handle blur event
+  // const handleBlur = (name: keyof typeof inputs) => {
+  //   if (inputs[name] === '') {
+  //     setInputs(prev => ({ ...prev, [name]: 0 }));
+  //   }
+  // };
+
+ 
+  const handleInputChange = (name: keyof InputsState, value: string | number | boolean) => {
+    // Create a copy of inputs for processing
+    const updatedInputs = { ...inputs };
+
+    // Handle input type conversion
+    if (typeof updatedInputs[name] === 'number') {
+      // Handle numeric fields
+      const rawValue = String(value);
+      if (rawValue === '' || /^-?\d*\.?\d*$/.test(rawValue)) {
+        // Valid numeric input - for empty string, allow it in the UI but store as number type
+        if (rawValue === '') {
+          // Track empty input for display purposes, but store as empty string in a way TypeScript accepts
+          // We'll convert this to 0 on blur
+          setInputs(prev => ({ ...prev, [name]: '' as any }));
+          return; // Exit early after setting the temporary empty value
+        } else {
+          // Use type assertion to handle the TypeScript error
+          (updatedInputs as any)[name] = Number(rawValue);
+        }
       } else {
-        const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
-        const numValue = Number(value);
-        if (numValue > purchasePrice) value = purchasePrice;
-        updatedInputs.downPayment = Number(value);
+        // Invalid numeric input, ignore
+        return;
       }
-    } else if (name === 'downPaymentType') {
-      const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
-      const downPayment = typeof inputs.downPayment === 'number' ? inputs.downPayment : 0;
-      
-      if (value === 'percent') {
-        updatedInputs.downPayment = Math.round((downPayment / purchasePrice) * 100);
-      } else {
-        updatedInputs.downPayment = Math.round(purchasePrice * (downPayment / 100) / 100) * 100;
+    } else {
+      // Handle non-numeric fields (boolean, string)
+      (updatedInputs as any)[name] = value;
+    }
+
+    // Handle special field relationships
+    const purchasePrice = typeof updatedInputs.purchasePrice === 'number' ? updatedInputs.purchasePrice : 0;
+    const downPayment = typeof updatedInputs.downPayment === 'number' ? updatedInputs.downPayment : 0;
+
+    // Special case: Down payment type switching
+    if (name === 'downPaymentType') {
+      if (value === 'percent' && purchasePrice > 0) {
+        // Convert from amount to percentage
+        (updatedInputs as any).downPayment = Math.round((downPayment / purchasePrice) * 100 * 100) / 100;
+      } else if (value === 'amount') {
+        // Convert from percentage to amount
+        (updatedInputs as any).downPayment = Math.round(purchasePrice * (downPayment / 100));
       }
     }
-  
+    // Special case: Purchase price update affects down payment amount if in percentage mode
+    else if (name === 'purchasePrice' && updatedInputs.downPaymentType === 'percent' && purchasePrice > 0) {
+      // No need to update down payment value here - the percentage remains the same
+      // User will see the equivalent dollar amount in the display text
+    }
+    // Special case: Down payment input validation
+    else if (name === 'downPayment') {
+      if (updatedInputs.downPaymentType === 'percent') {
+        // Cap percentage at 100%
+        if (downPayment > 100) (updatedInputs as any).downPayment = 100;
+        // Floor at 0%
+        if (downPayment < 0) (updatedInputs as any).downPayment = 0;
+      } else {
+        // Cap amount at purchase price
+        if (downPayment > purchasePrice) (updatedInputs as any).downPayment = purchasePrice;
+        // Floor at 0
+        if (downPayment < 0) (updatedInputs as any).downPayment = 0;
+      }
+    }
+
+    // Update state with processed inputs
     setInputs(updatedInputs);
   };
 
-  // Handle blur event
-  const handleBlur = (name: keyof typeof inputs) => {
-    if (inputs[name] === '') {
-      setInputs(prev => ({ ...prev, [name]: 0 }));
+  const handleBlur = (name: keyof InputsState) => {
+    const currentValue = inputs[name];
+    
+    // Only process numeric fields
+    if (typeof inputs[name as keyof typeof inputs] === 'number' || currentValue === '') {
+      const valueAsString = String(currentValue).trim();
+      
+      // Check for empty or invalid numeric values
+      if (valueAsString === '' || valueAsString === '.' || valueAsString === '-' || isNaN(parseFloat(valueAsString))) {
+        // Set empty or invalid values to 0
+        setInputs(prev => ({ ...prev, [name]: 0 as any }));
+      } else {
+        // Ensure the value is stored as a proper number
+        const numericValue = parseFloat(valueAsString);
+        
+        // Only update if the parsed value differs from the current value
+        if (numericValue !== currentValue) {
+          setInputs(prev => ({ ...prev, [name]: numericValue as any }));
+        }
+      }
     }
+    // We don't need special handling for non-numeric fields on blur
   };
 
-  // Calculate mortgage details whenever inputs change
-  useEffect(() => {
-    if (Object.values(inputs).some(value => value === '')) {
-      return;
-    }
-    
-    calculateMortgage();
-  }, [inputs]);
+  // Calculate payment amount
+  const calculatePaymentAmount = (
+    principal: number, 
+    annualInterestRate: number, 
+    amortizationYears: number, 
+    paymentsPerYear: number, 
+    isAccelerated: boolean = false
+  ): number => {
+    //const interestRate = typeof inputs.interestRate === 'number' ? inputs.interestRate : 0;
+    //const annualInterestRate = interestRate / 100;
+    //const paymentFrequencyObj = PAYMENT_FREQUENCIES.find(f => f.value === inputs.paymentFrequency);
+    //const paymentsPerYear = paymentFrequencyObj?.paymentsPerYear || 12;
+    const totalPayments = amortizationYears  * paymentsPerYear;
+    const interestRatePerPayment = annualInterestRate / paymentsPerYear;
 
-  // Calculate mortgage
-  const calculateMortgage = () => {
+    // Base payment calculation
+    let paymentAmount;
+    if (annualInterestRate  === 0) {
+      paymentAmount = principal / totalPayments;
+    } else {
+      paymentAmount = principal * 
+        (interestRatePerPayment * Math.pow(1 + interestRatePerPayment, totalPayments)) / 
+        (Math.pow(1 + interestRatePerPayment, totalPayments) - 1);
+    }
+
+    // If accelerated, adjust payment amount
+    if (isAccelerated) {
+      // For accelerated bi-weekly, take the monthly payment and divide by 2
+      // For accelerated weekly, take the monthly payment and divide by 4
+      const monthlyEquivalent = principal * 
+        ((annualInterestRate/12) * Math.pow(1 + (annualInterestRate/12), amortizationYears * 12)) / 
+        (Math.pow(1 + (annualInterestRate/12), amortizationYears * 12) - 1);
+      //paymentAmount = monthlyEquivalent / 2;
+    // } else if (inputs.paymentFrequency === 'accelerated_weekly') {
+    //   const monthlyEquivalent = totalMortgage * 
+    //     (annualInterestRate/12 * Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12)) / 
+    //     (Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12) - 1);
+    //   paymentAmount = monthlyEquivalent / 4;
+      if (paymentsPerYear == 26) { // bi-weekly
+        paymentAmount = monthlyEquivalent / 2;
+      } else if (paymentsPerYear == 52) { // weekly
+        paymentAmount = monthlyEquivalent / 4;
+      }
+    }
+        
+    return paymentAmount;
+  };
+
+   // Calculate mortgage
+   const calculateMortgage = useCallback(() => {
     // Calculate down payment amount and percentage
     let downPaymentAmount, downPaymentPercent;
     const purchasePrice = typeof inputs.purchasePrice === 'number' ? inputs.purchasePrice : 0;
@@ -297,15 +559,43 @@ const MortgageCalculator = () => {
       downPaymentAmount = (purchasePrice * downPaymentPercent) / 100;
     }
 
-    // Ensure down payment meets minimum requirements
-    const minimumDownPaymentPercent = inputs.foreignBuyer ? 35 : 
-      (purchasePrice <= 500000 ? 5 :
-       purchasePrice <= 1000000 ? ((purchasePrice - 500000) * 0.1 + 25000) / purchasePrice * 100 : 20);
-    
-    const minimumDownPayment = (minimumDownPaymentPercent / 100) * purchasePrice;
+    let minimumDownPaymentRequired: number;
+    if (inputs.foreignBuyer) {
+      // Foreign Buyer minimum percentage (e.g., 35% - VERIFY current rules)
+      // Note: Rules for foreign buyers can be complex and vary.
+      minimumDownPaymentRequired = purchasePrice * 0.35;
+    } else {
+      // Standard Canadian Minimum Down Payment Rules (~Mar 2025 - VERIFY rules)
 
-    const actualDownPayment = Math.max(downPaymentAmount, minimumDownPayment);
-    const actualDownPaymentPercent = (actualDownPayment / purchasePrice) * 100;
+      if (purchasePrice <= 500000) {
+          // Tier 1: Price <= $500k requires 5% down.
+          minimumDownPaymentRequired = purchasePrice * 0.05;
+
+      } else if (purchasePrice > 500000 && purchasePrice <= 1000000) {
+          // Tier 2: Price > $500k and <= $1M requires 5% on the first $500k
+          //         plus 10% on the portion above $500k.
+          const firstPortionDownPayment = 500000 * 0.05; // $25,000
+          const secondPortionAmount = purchasePrice - 500000;
+          const secondPortionDownPayment = secondPortionAmount * 0.10;
+          minimumDownPaymentRequired = firstPortionDownPayment + secondPortionDownPayment;
+
+      } else { // purchasePrice > 1,000,000
+          // Tier 3: Price > $1M requires 20% down.
+          // Mortgage default insurance is generally not available for homes > $1M.
+          minimumDownPaymentRequired = purchasePrice * 0.20;
+      }
+    }
+    minimumDownPaymentRequired = Math.max(0, Math.round(minimumDownPaymentRequired));
+
+    // Ensure down payment meets minimum requirements
+    // const minimumDownPaymentPercent = inputs.foreignBuyer ? 35 : 
+    //   (purchasePrice <= 500000 ? 5 :
+    //    purchasePrice <= 1000000 ? ((purchasePrice - 500000) * 0.1 + 25000) / purchasePrice * 100 : 20);
+    
+    // const minimumDownPayment = (minimumDownPaymentPercent / 100) * purchasePrice;
+
+    const actualDownPayment = Math.max(downPaymentAmount, minimumDownPaymentRequired);
+    const actualDownPaymentPercent = purchasePrice > 0 ? (actualDownPayment / purchasePrice) * 100 : 0; //(actualDownPayment / purchasePrice) * 100;
     
     // Calculate mortgage insurance (if down payment < 20%)
     let mortgageInsurance = 0;
@@ -327,39 +617,51 @@ const MortgageCalculator = () => {
       mortgageInsurance = baseAmount * (insuranceRate / 100);
     }
 
+    let pstOnInsurance = 0;
+    const province = inputs.province;
+
+    if (mortgageInsurance > 0) {
+      let pstRate = 0;
+      switch (province) {
+        case 'ON':
+          pstRate = 0.08; // 8% Retail Sales Tax (RST) in Ontario - CHECK CURRENT RATE
+          break;
+      case 'QC':
+          pstRate = 0.09975; // 9.975% Quebec Sales Tax (QST) - CHECK CURRENT RATE
+          break;
+      case 'SK':
+          pstRate = 0.06; // 6% Provincial Sales Tax (PST) in Saskatchewan - CHECK CURRENT RATE
+          break;
+      // MB used to charge PST but might have stopped - VERIFY
+      // default: 0%
+      }
+      pstOnInsurance = mortgageInsurance * pstRate;
+    }
+
     // Calculate total mortgage amount
     const mortgageAmount = purchasePrice - actualDownPayment;
     const totalMortgage = mortgageAmount + mortgageInsurance;
 
-    // Calculate payment amount
+    // Calculate payment amount using the new standardized function
     const interestRate = typeof inputs.interestRate === 'number' ? inputs.interestRate : 0;
     const annualInterestRate = interestRate / 100;
     const paymentFrequencyObj = PAYMENT_FREQUENCIES.find(f => f.value === inputs.paymentFrequency);
     const paymentsPerYear = paymentFrequencyObj?.paymentsPerYear || 12;
-    const totalPayments = inputs.amortizationPeriod * paymentsPerYear;
-    const interestRatePerPayment = annualInterestRate / paymentsPerYear;
 
-    let paymentAmount;
-    if (interestRate === 0) {
-      paymentAmount = totalMortgage / totalPayments;
-    } else {
-      paymentAmount = totalMortgage * 
-        (interestRatePerPayment * Math.pow(1 + interestRatePerPayment, totalPayments)) / 
-        (Math.pow(1 + interestRatePerPayment, totalPayments) - 1);
-    }
+    // Determine if payment is accelereated
+    const isAccelerated =
+      inputs.paymentFrequency == 'accelerated_biweekly' ||
+      inputs.paymentFrequency == 'accelereated_weekly';
 
-    // If accelerated, adjust payment amount
-    if (inputs.paymentFrequency === 'accelerated_biweekly') {
-      const monthlyEquivalent = totalMortgage * 
-        (annualInterestRate/12 * Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12)) / 
-        (Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12) - 1);
-      paymentAmount = monthlyEquivalent / 2;
-    } else if (inputs.paymentFrequency === 'accelerated_weekly') {
-      const monthlyEquivalent = totalMortgage * 
-        (annualInterestRate/12 * Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12)) / 
-        (Math.pow(1 + annualInterestRate/12, inputs.amortizationPeriod * 12) - 1);
-      paymentAmount = monthlyEquivalent / 4;
-    }
+
+    // Calculate the payment amount using our helper function
+    const paymentAmount = calculatePaymentAmount(
+      totalMortgage,
+      annualInterestRate,
+      inputs.amortizationPeriod,
+      paymentsPerYear,
+      isAccelerated
+    );
 
     // Calculate monthly equivalent payment for expense summaries
     const monthlyPayment = inputs.paymentFrequency === 'monthly' 
@@ -387,14 +689,16 @@ const MortgageCalculator = () => {
       let lastPaymentNumber = 0;
       
       // Calculate adjusted payment with increase
-      const adjustedPayment = paymentAmount * (1 + paymentIncrease / 100);
+     // const adjustedPayment = paymentAmount * (1 + paymentIncrease / 100);
       
       // Process each year
       for (let year = 1; year <= amortizationYears; year++) {
         let yearlyPrincipalPaid = 0;
         let yearlyInterestPaid = 0;
         let yearlyExtraPayments = 0;
-        
+         // Calculate payment for this year with compounding annual increase
+        const yearlyAdjustedPayment = paymentAmount * Math.pow(1 + paymentIncrease / 100, year - 1);
+
         // Process each payment in the year
         for (let i = 1; i <= paymentsPerYear; i++) {
           lastPaymentNumber++;
@@ -402,7 +706,7 @@ const MortgageCalculator = () => {
           
           // Calculate interest and principal for this payment
           const interestForPayment = balance * interestRatePerPayment;
-          let principalForPayment = Math.min(adjustedPayment - interestForPayment, balance);
+          let principalForPayment = Math.min(yearlyAdjustedPayment - interestForPayment, balance);
           
           // Add extra payment if specified
           let extraPrincipalPaid = 0;
@@ -438,10 +742,12 @@ const MortgageCalculator = () => {
           yearlyExtraPayments += annualPrepaymentAmount;
         }
         
+        const startingBalanceForYear = balance; // Capture balance before year's payments
+
         // Add year to schedule
         yearlySchedule.push({
           year,
-          startingBalance: principal - yearlyPrincipalPaid + yearlyInterestPaid + balance,
+          startingBalance: startingBalanceForYear, //principal - yearlyPrincipalPaid + yearlyInterestPaid + balance,
           principalPaid: yearlyPrincipalPaid,
           interestPaid: yearlyInterestPaid,
           extraPayments: yearlyExtraPayments,
@@ -511,7 +817,33 @@ const MortgageCalculator = () => {
       monthlyMaintenance;
     
     // Calculate closing costs
-    const landTransferTax = purchasePrice * (inputs.province === 'ON' ? 0.02 : 0.015); // Simplified calculation
+    const calculateLandTransferTax = (price: number, province: string) => {
+      if (province === 'ON') {
+        // Ontario tiered calculation
+        const brackets = [
+          { max: 55000, rate: 0.005 },
+          { max: 250000, rate: 0.01 },
+          { max: 400000, rate: 0.015 },
+          { max: Infinity, rate: 0.02 }
+        ];
+        
+        let tax = 0;
+        let remaining = price;
+        
+        for (const bracket of brackets) {
+          if (remaining <= 0) break;
+          const taxable = Math.min(remaining, bracket.max);
+          tax += taxable * bracket.rate;
+          remaining -= taxable;
+        }
+        
+        return tax;
+      }
+      
+      // Default calculation for other provinces
+      return price * 0.015; // 1.5%
+    };
+    const landTransferTax = calculateLandTransferTax(purchasePrice, inputs.province); //purchasePrice * (inputs.province === 'ON' ? 0.02 : 0.015); // Simplified calculation
     const landTransferTaxRebate = inputs.firstTimeBuyer ? Math.min(4000, landTransferTax) : 0;
     
     const legalFees = typeof inputs.legalFees === 'number' ? inputs.legalFees : 0;
@@ -523,8 +855,8 @@ const MortgageCalculator = () => {
     const movingCosts = typeof inputs.movingCosts === 'number' ? inputs.movingCosts : 0;
     const foreignBuyerTax = inputs.foreignBuyer ? (purchasePrice * (inputs.province === 'ON' ? 0.25 : 0.20)) : 0;
     
-    const closingCosts = landTransferTax - landTransferTaxRebate + legalFees + titleInsurance + 
-                       homeInspection + appraisalFee + brokerageFee + lenderFee + movingCosts + foreignBuyerTax;
+    const closingCosts = Math.round(landTransferTax - landTransferTaxRebate + legalFees + titleInsurance + 
+                       homeInspection + appraisalFee + brokerageFee + lenderFee + movingCosts + foreignBuyerTax + pstOnInsurance);
 
     // Calculate interest paid over term and balance at end of term
     const interestPaidOverTerm = schedule.totalInterestPaidOverTerm;
@@ -538,8 +870,10 @@ const MortgageCalculator = () => {
     const timeShaved = originalAmortization - effectiveAmortization;
 
     // Calculate principal and interest for the first payment
-    const interestPerPayment = totalMortgage * interestRatePerPayment;
+    const interestPerPayment = totalMortgage * ((annualInterestRate) / paymentsPerYear);
     const principalPerPayment = paymentAmount - interestPerPayment;
+    const firstInterestPerPayment = totalMortgage * interestPerPayment;
+    const firstPrincipalPerPayment = paymentAmount - firstInterestPerPayment;
 
     // Update results
     setResults({
@@ -550,6 +884,8 @@ const MortgageCalculator = () => {
       monthlyPayment,
       principalPerPayment,
       interestPerPayment,
+      firstPrincipalPerPayment,
+      firstInterestPerPayment,
       totalMonthlyExpenses,
       interestPaidOverTerm,
       balanceAtEndOfTerm,
@@ -561,7 +897,17 @@ const MortgageCalculator = () => {
       interestSavingsOverAmortization,
       timeShaved
     });
-  };
+  }, [inputs]);
+
+  // Calculate mortgage details whenever inputs change
+  useEffect(() => {
+    if (Object.values(inputs).some(value => value === '')) {
+      return;
+    }
+    
+    calculateMortgage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputs, calculateMortgage]);
 
   // Prepare data for payment breakdown chart
   const preparePaymentBreakdownData = () => {
@@ -1083,6 +1429,22 @@ const MortgageCalculator = () => {
                         <span className="text-gray-700">Payment:</span>
                         <span className="font-semibold text-gray-900">{formatCurrency(results.monthlyPayment)} monthly</span>
                       </div>
+                      {/* <div className="flex justify-between">
+                        <span className="text-gray-700">First Payment Principal:</span>
+                        <span className="font-semibold text-gray-900">
+                          {formatCurrency(results.firstPrincipalPerPayment)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">First Payment Interest:</span>
+                        <span className="font-semibold text-gray-900">
+                          {formatCurrency(results.firstInterestPerPayment)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        * Principal and interest amounts shown are for the first payment only. 
+                        These values will change over time as your balance decreases.
+                      </p> */}
                       <div className="flex justify-between">
                         <span className="text-gray-700">Principal:</span>
                         <span className="font-semibold text-gray-900">{formatCurrency(results.principalPerPayment)}</span>
@@ -1229,9 +1591,9 @@ const MortgageCalculator = () => {
                   <div className="flex justify-between mb-2">
                     <span className="font-semibold text-gray-800">Other Expenses</span>
                     <span className="font-semibold text-gray-800">{formatCurrency(
-                      inputs.homeInsurance / 12 + 
+                      (inputs.homeInsurance / 12) + 
                       inputs.utilities + 
-                      (inputs.purchasePrice * inputs.maintenance / 100) / 12
+                      ((inputs.purchasePrice * (inputs.maintenance / 100)) / 12)
                     )}</span>
                   </div>
                   <div className="pl-4 space-y-1 text-sm">
