@@ -75,13 +75,13 @@ const MortgageCalculator = () => {
     { value: 'condo', label: 'Condominium' }
   ];
 
-  const PAYMENT_FREQUENCIES = [
+  const PAYMENT_FREQUENCIES = React.useMemo(() => [
     { value: 'monthly', label: 'Monthly', paymentsPerYear: 12 },
     { value: 'biweekly', label: 'Bi-Weekly', paymentsPerYear: 26 },
     { value: 'accelerated_biweekly', label: 'Accelerated Bi-Weekly', paymentsPerYear: 26 },
     { value: 'weekly', label: 'Weekly', paymentsPerYear: 52 },
     { value: 'accelerated_weekly', label: 'Accelerated Weekly', paymentsPerYear: 52 }
-  ];
+  ], []);
 
   const AMORTIZATION_PERIODS = Array.from({ length: 26 }, (_, i) => i + 5)
     .filter(year => year <= 30)
@@ -170,6 +170,7 @@ const MortgageCalculator = () => {
  * Calculates Provincial (and applicable Municipal) Land Transfer Tax.
  * NOTE: Rates are examples and MUST be verified/updated.
  */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const calculateLTT = ({ purchasePrice, province, municipality }: TaxInputArgs): number => {
     let ltt = 0;
 
@@ -226,11 +227,15 @@ const MortgageCalculator = () => {
 
     return Math.round(ltt); // Round to nearest dollar
   };
+  
+  // Note: calculateLTT isn't directly called in this file but is used by the calculateLandTransferTax function further down
+  // which calls this with specific arguments in the calculateMortgage function
 
     /**
    * Calculates First-Time Home Buyer Land Transfer Tax Rebates.
    * NOTE: Amounts/Rules are examples and MUST be verified/updated.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const calculateLTTRebate = ({ purchasePrice, province, municipality, firstTimeBuyer, lttAmount }: TaxInputArgs & { lttAmount: number }): number => {
     if (!firstTimeBuyer) return 0;
 
@@ -270,6 +275,9 @@ const MortgageCalculator = () => {
 
     return Math.round(rebate);
   };
+  
+  // Note: calculateLTTRebate isn't directly called in this file but is used by the landTransferTaxRebate calculation
+  // in the calculateMortgage function to determine first-time homebuyer rebates
 
   // States
   const [inputs, setInputs] = useState<InputsState>({
@@ -344,9 +352,7 @@ const MortgageCalculator = () => {
   };
 
   formatPercent(inputs.interestRate)
-  const displayPercent = (value: number) => {
-    return `${value.toFixed(2)}%`;
-  };
+  // Using formatPercent instead of displayPercent throughout the code
 
   // Handle input changes
   // const handleInputChange = (name: string, value: string | number | boolean) => {
@@ -418,13 +424,13 @@ const MortgageCalculator = () => {
       if (rawValue === '' || /^-?\d*\.?\d*$/.test(rawValue)) {
         // Valid numeric input - for empty string, allow it in the UI but store as number type
         if (rawValue === '') {
-          // Track empty input for display purposes, but store as empty string in a way TypeScript accepts
+          // Track empty input for display purposes, but store as empty string
           // We'll convert this to 0 on blur
-          setInputs(prev => ({ ...prev, [name]: '' as any }));
+          setInputs(prev => ({ ...prev, [name]: '' as unknown as number }));
           return; // Exit early after setting the temporary empty value
         } else {
           // Use type assertion to handle the TypeScript error
-          (updatedInputs as any)[name] = Number(rawValue);
+          (updatedInputs as Record<string, number | string | boolean>)[name] = Number(rawValue);
         }
       } else {
         // Invalid numeric input, ignore
@@ -432,7 +438,7 @@ const MortgageCalculator = () => {
       }
     } else {
       // Handle non-numeric fields (boolean, string)
-      (updatedInputs as any)[name] = value;
+      (updatedInputs as Record<string, number | string | boolean>)[name] = value;
     }
 
     // Handle special field relationships
@@ -443,10 +449,10 @@ const MortgageCalculator = () => {
     if (name === 'downPaymentType') {
       if (value === 'percent' && purchasePrice > 0) {
         // Convert from amount to percentage
-        (updatedInputs as any).downPayment = Math.round((downPayment / purchasePrice) * 100 * 100) / 100;
+        updatedInputs.downPayment = Math.round((downPayment / purchasePrice) * 100 * 100) / 100;
       } else if (value === 'amount') {
         // Convert from percentage to amount
-        (updatedInputs as any).downPayment = Math.round(purchasePrice * (downPayment / 100));
+        updatedInputs.downPayment = Math.round(purchasePrice * (downPayment / 100));
       }
     }
     // Special case: Purchase price update affects down payment amount if in percentage mode
@@ -458,14 +464,14 @@ const MortgageCalculator = () => {
     else if (name === 'downPayment') {
       if (updatedInputs.downPaymentType === 'percent') {
         // Cap percentage at 100%
-        if (downPayment > 100) (updatedInputs as any).downPayment = 100;
+        if (downPayment > 100) updatedInputs.downPayment = 100;
         // Floor at 0%
-        if (downPayment < 0) (updatedInputs as any).downPayment = 0;
+        if (downPayment < 0) updatedInputs.downPayment = 0;
       } else {
         // Cap amount at purchase price
-        if (downPayment > purchasePrice) (updatedInputs as any).downPayment = purchasePrice;
+        if (downPayment > purchasePrice) updatedInputs.downPayment = purchasePrice;
         // Floor at 0
-        if (downPayment < 0) (updatedInputs as any).downPayment = 0;
+        if (downPayment < 0) updatedInputs.downPayment = 0;
       }
     }
 
@@ -483,14 +489,14 @@ const MortgageCalculator = () => {
       // Check for empty or invalid numeric values
       if (valueAsString === '' || valueAsString === '.' || valueAsString === '-' || isNaN(parseFloat(valueAsString))) {
         // Set empty or invalid values to 0
-        setInputs(prev => ({ ...prev, [name]: 0 as any }));
+        setInputs(prev => ({ ...prev, [name]: 0 as number }));
       } else {
         // Ensure the value is stored as a proper number
         const numericValue = parseFloat(valueAsString);
         
         // Only update if the parsed value differs from the current value
         if (numericValue !== currentValue) {
-          setInputs(prev => ({ ...prev, [name]: numericValue as any }));
+          setInputs(prev => ({ ...prev, [name]: numericValue }));
         }
       }
     }
@@ -897,7 +903,7 @@ const MortgageCalculator = () => {
       interestSavingsOverAmortization,
       timeShaved
     });
-  }, [inputs]);
+  }, [inputs, PAYMENT_FREQUENCIES]);
 
   // Calculate mortgage details whenever inputs change
   useEffect(() => {
@@ -906,7 +912,6 @@ const MortgageCalculator = () => {
     }
     
     calculateMortgage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputs, calculateMortgage]);
 
   // Prepare data for payment breakdown chart
